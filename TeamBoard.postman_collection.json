@@ -1,0 +1,613 @@
+{
+  "info": {
+    "_postman_id": "b7e6a1c2-5d34-4f8a-9c1e-teamboard0001",
+    "name": "TeamBoard API",
+    "description": "TeamBoard - AI-powered Knowledge Base B2B API.\n\nRun the requests in order (1-11) against a freshly seeded database.\nBefore re-running the whole collection, reset the database with:\n\n    python manage.py flush --no-input && python manage.py seed_kb\n\nDemo admin account created by `python manage.py seed_kb`:\nusername: teamboard_admin | password: adminpass123",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01 - Register - Success (201)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 201\", function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "const data = pm.response.json();",
+              "pm.test(\"Response contains username\", function () {",
+              "    pm.expect(data.username).to.eql(\"acmecorp\");",
+              "});",
+              "pm.test(\"Response contains company_name\", function () {",
+              "    pm.expect(data.company_name).to.eql(\"Acme Corp\");",
+              "});",
+              "pm.test(\"Auto-generated api_key is returned\", function () {",
+              "    pm.expect(data.api_key).to.be.a(\"string\").and.not.empty;",
+              "});",
+              "pm.test(\"JWT access token is returned\", function () {",
+              "    pm.expect(data.access).to.be.a(\"string\").and.not.empty;",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/auth/register/",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "register",
+            ""
+          ]
+        },
+        "description": "Register a new company. A post_save signal auto-creates the Company profile and its api_key; the response also returns a JWT access token so the company can start calling the API immediately.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"acmecorp\",\n  \"password\": \"securepass123\",\n  \"company_name\": \"Acme Corp\",\n  \"email\": \"dev@acmecorp.com\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "02 - Register - Duplicate Username (400)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 400\", function () {",
+              "    pm.response.to.have.status(400);",
+              "});",
+              "pm.test(\"Duplicate username is rejected with an error\", function () {",
+              "    pm.expect(pm.response.json().error).to.include(\"already exists\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/auth/register/",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "register",
+            ""
+          ]
+        },
+        "description": "Registering with a username that already exists must return 400.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"acmecorp\",\n  \"password\": \"securepass123\",\n  \"company_name\": \"Acme Corp\",\n  \"email\": \"dev@acmecorp.com\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "03 - Register - Missing Fields (400)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 400\", function () {",
+              "    pm.response.to.have.status(400);",
+              "});",
+              "pm.test(\"Missing fields are reported\", function () {",
+              "    pm.expect(pm.response.json().error).to.include(\"required\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/auth/register/",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "register",
+            ""
+          ]
+        },
+        "description": "Registering without password and company_name must return 400.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"incompletecorp\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "04 - Login - Success (200)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "const data = pm.response.json();",
+              "pm.test(\"JWT access token is returned\", function () {",
+              "    pm.expect(data.access).to.be.a(\"string\").and.not.empty;",
+              "});",
+              "pm.test(\"company_name is returned\", function () {",
+              "    pm.expect(data.company_name).to.eql(\"Acme Corp\");",
+              "});",
+              "pm.test(\"api_key is returned\", function () {",
+              "    pm.expect(data.api_key).to.be.a(\"string\").and.not.empty;",
+              "});",
+              "pm.collectionVariables.set(\"client_token\", data.access);",
+              "console.log(\"client_token saved for subsequent requests\");"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/auth/login/",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "login",
+            ""
+          ]
+        },
+        "description": "Login with valid credentials. The returned access token is saved as the collection variable `client_token` and reused by the protected KB query requests.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"acmecorp\",\n  \"password\": \"securepass123\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "05 - Login - Invalid Credentials (401)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 401\", function () {",
+              "    pm.response.to.have.status(401);",
+              "});",
+              "pm.test(\"Clear error message is returned\", function () {",
+              "    pm.expect(pm.response.json().error).to.include(\"Invalid\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/auth/login/",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "login",
+            ""
+          ]
+        },
+        "description": "Login with a wrong password must return 401 with a clear error message.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"acmecorp\",\n  \"password\": \"wrongpassword\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "06 - KB Query - No Token (401)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 401\", function () {",
+              "    pm.response.to.have.status(401);",
+              "});",
+              "pm.test(\"Authentication error is returned\", function () {",
+              "    pm.expect(pm.response.json().detail).to.include(\"credentials\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/kb/query/",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "kb",
+            "query",
+            ""
+          ]
+        },
+        "description": "Calling the protected KB query endpoint without an Authorization header must return 401 (global JWT protection via DRF defaults).",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"search\": \"select_related\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "07 - KB Query - With Token, Results Found (200)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "const data = pm.response.json();",
+              "pm.test(\"Search term is echoed back\", function () {",
+              "    pm.expect(data.search).to.eql(\"select_related\");",
+              "});",
+              "pm.test(\"At least one result is found\", function () {",
+              "    pm.expect(data.count).to.be.at.least(1);",
+              "});",
+              "pm.test(\"results length matches count\", function () {",
+              "    pm.expect(data.results.length).to.eql(data.count);",
+              "});",
+              "pm.test(\"Each result has id, question, answer and category\", function () {",
+              "    data.results.forEach(function (r) {",
+              "        pm.expect(r).to.have.property(\"id\");",
+              "        pm.expect(r).to.have.property(\"question\");",
+              "        pm.expect(r).to.have.property(\"answer\");",
+              "        pm.expect(r).to.have.property(\"category\");",
+              "    });",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{client_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/kb/query/",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "kb",
+            "query",
+            ""
+          ]
+        },
+        "description": "Query the knowledge base with a valid token. Matches question OR answer via icontains and logs the query in QueryLog (inside transaction.atomic()).",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"search\": \"select_related\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "08 - KB Query - No Matching Results (200, count 0)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200 (not 404)\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "const data = pm.response.json();",
+              "pm.test(\"count is 0\", function () {",
+              "    pm.expect(data.count).to.eql(0);",
+              "});",
+              "pm.test(\"results is an empty list\", function () {",
+              "    pm.expect(data.results).to.be.an(\"array\").that.is.empty;",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{client_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/kb/query/",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "kb",
+            "query",
+            ""
+          ]
+        },
+        "description": "A query with no matches must return 200 with an empty results list and count 0 - and the QueryLog is still written because usage-based billing counts queries made, not answers found.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"search\": \"zzz-no-such-topic-anywhere\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "09 - KB Query - Blank Search (400)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 400\", function () {",
+              "    pm.response.to.have.status(400);",
+              "});",
+              "pm.test(\"Blank search is rejected with an error\", function () {",
+              "    pm.expect(pm.response.json().error).to.include(\"required\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{client_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/kb/query/",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "kb",
+            "query",
+            ""
+          ]
+        },
+        "description": "A blank or missing search field must return 400 and must NOT write a QueryLog entry.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"search\": \"   \"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "10 - Usage Summary - Client Token (403)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 403\", function () {",
+              "    pm.response.to.have.status(403);",
+              "});",
+              "pm.test(\"Non-admin is rejected by IsAdminUser\", function () {",
+              "    pm.expect(pm.response.json().detail).to.include(\"admin\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{client_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/admin/usage-summary/",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "usage-summary",
+            ""
+          ]
+        },
+        "description": "A regular CLIENT company must be forbidden (403) from the admin usage dashboard."
+      },
+      "response": []
+    },
+    {
+      "name": "11 - Usage Summary - Admin Token (200)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// Log in as the demo admin created by `python manage.py seed_kb`",
+              "// and store the token in the admin_token collection variable.",
+              "pm.sendRequest({",
+              "    url: pm.collectionVariables.get(\"base_url\") + \"/api/auth/login/\",",
+              "    method: \"POST\",",
+              "    header: { \"Content-Type\": \"application/json\" },",
+              "    body: {",
+              "        mode: \"raw\",",
+              "        raw: JSON.stringify({ username: \"teamboard_admin\", password: \"adminpass123\" })",
+              "    }",
+              "}, function (err, res) {",
+              "    if (err) {",
+              "        console.error(\"Admin login pre-request failed: \" + err);",
+              "        return;",
+              "    }",
+              "    pm.collectionVariables.set(\"admin_token\", res.json().access);",
+              "});"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "const data = pm.response.json();",
+              "pm.test(\"total_queries is a non-negative number\", function () {",
+              "    pm.expect(data.total_queries).to.be.a(\"number\").and.at.least(0);",
+              "});",
+              "pm.test(\"active_companies is a non-negative number\", function () {",
+              "    pm.expect(data.active_companies).to.be.a(\"number\").and.at.least(1);",
+              "});",
+              "pm.test(\"top_search_terms is a list of at most 5 terms\", function () {",
+              "    pm.expect(data.top_search_terms).to.be.an(\"array\").with.length.of.at.most(5);",
+              "});",
+              "pm.test(\"top_search_terms entries have search_term and count\", function () {",
+              "    data.top_search_terms.forEach(function (t) {",
+              "        pm.expect(t).to.have.property(\"search_term\");",
+              "        pm.expect(t).to.have.property(\"count\");",
+              "    });",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{admin_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/admin/usage-summary/",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "usage-summary",
+            ""
+          ]
+        },
+        "description": "An ADMIN company sees the platform-wide usage dashboard: total queries, distinct companies that queried, and the top 5 most-searched terms. The admin token is obtained automatically in the pre-request script by logging in as the demo admin (teamboard_admin / adminpass123) created by the seed command."
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://127.0.0.1:8000"
+    },
+    {
+      "key": "client_token",
+      "value": ""
+    },
+    {
+      "key": "admin_token",
+      "value": ""
+    }
+  ]
+}

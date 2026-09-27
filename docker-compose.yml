@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgres:17
+    container_name: teamboard_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: teamboard
+      POSTGRES_USER: teamboard
+      POSTGRES_PASSWORD: teamboard_secret
+    ports:
+      - "5432:5432"
+    volumes:
+      - teamboard_pgdata:/var/lib/postgresql/data
+
+volumes:
+  teamboard_pgdata:

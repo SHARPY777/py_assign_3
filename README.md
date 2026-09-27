@@ -1,0 +1,196 @@
+# TeamBoard - AI-Powered Knowledge Base B2B API
+
+TeamBoard is a B2B API service backed by an AI-powered knowledge base of
+technical Q&A entries (APIs, databases, cloud, frameworks). Companies register,
+receive an auto-generated **API key**, query the knowledge base by keyword, and
+every query is logged so the platform admin can watch a live usage dashboard.
+
+## Tech Stack
+
+- Python 3.12+ / Django 5.2 LTS
+- Django REST Framework + SimpleJWT (JWT authentication)
+- PostgreSQL 17 via Docker (SQLite fallback for quick local runs)
+- python-dotenv for credential management
+
+## Project Structure
+
+```
+teamboard/            # Django project (settings, root urls)
+api/                  # Single app with all assignment logic
+  models.py           # Company, KBEntry, QueryLog
+  signals.py         # post_save -> auto-create Company + api_key
+  permissions.py     # custom IsAdminUser (role-based admin check)
+  views.py            # all 4 endpoints
+  urls.py
+  management/commands/seed_kb.py   # seed KB entries + demo admin
+.env                  # credentials (gitignored)
+.env.example          # template to copy from
+docker-compose.yml    # PostgreSQL container
+requirements.txt      # pinned dependencies
+TeamBoard.postman_collection.json # 11 tested scenarios
+```
+
+## 1. Database Setup (PostgreSQL via Docker)
+
+All credentials live in `.env` - never in `settings.py`.
+
+```bash
+# 1. Copy the template and adjust if needed
+cp .env.example .env
+
+# 2. Start PostgreSQL in Docker
+docker compose up -d
+
+# 3. Confirm it is running
+docker compose ps
+```
+
+`docker-compose.yml` runs a `postgres:17` container with:
+
+| Setting  | Value            |
+| -------- | ---------------- |
+| Database | `teamboard`      |
+| User     | `teamboard`      |
+| Password | `teamboard_secret` |
+| Host     | `localhost`      |
+| Port     | `5432`           |
+
+These match `.env.example`, and `settings.py` reads them via `os.getenv()`.
+
+> **No-Docker fallback (used during development on this machine):** if
+> `POSTGRES_HOST` is not set in `.env`, the project automatically falls back
+> to a local SQLite database (`db.sqlite3`) so it can run without any database
+> server. To switch to the Dockerised PostgreSQL, simply uncomment the
+> `POSTGRES_*` lines in `.env` (and restart). Both paths use the exact same
+> models and migrations.
+
+You can inspect the database with PGAdmin (connect to `localhost:5432` with
+the credentials above) or `docker compose exec db psql -U teamboard -d teamboard`.
+
+## 2. Install Dependencies
+
+```bash
+python3 -m venv venv
+source venv/bin/activate      # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+## 3. Apply Migrations
+
+```bash
+python manage.py makemigrations api   # only needed if models changed
+python manage.py migrate
+```
+
+Verify the three tables exist (PGAdmin or `psql`): `api_company`, `api_kbentry`,
+`api_querylog`.
+
+## 4. Seed the Knowledge Base
+
+```bash
+python manage.py seed_kb
+```
+
+This inserts 14 Q&A entries across all five categories (several share keywords
+such as `select_related`, `JWT`, `Q objects`, `transaction.atomic` and
+`signals`, so searches return multiple hits) and creates a demo platform
+admin account:
+
+| Username         | Password       | Role  |
+| ---------------- | -------------- | ----- |
+| `teamboard_admin`| `adminpass123` | admin |
+
+> To give an existing company admin rights manually, flip its row's `role` to
+> `admin` in PGAdmin (`SELECT * FROM api_company;`) and log in again.
+
+## 5. Run the Server
+
+```bash
+python manage.py runserver
+```
+
+The API is served at `http://127.0.0.1:8000/api/`.
+
+## API Endpoints
+
+| # | Method | Path | Auth | Description |
+| - | ------ | ---- | ---- | ----------- |
+| 1 | POST | `/api/auth/register/`      | Public | Register company, returns JWT + api_key (201) |
+| 2 | POST | `/api/auth/login/`         | Public | Login, returns fresh JWT + company_name + api_key (200) |
+| 3 | POST | `/api/kb/query/`           | JWT    | Keyword search over Q&A, logs usage atomically (200) |
+| 4 | GET  | `/api/admin/usage-summary/`| Admin role | Total queries, active companies, top 5 terms (200) |
+
+### Example: query the knowledge base
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/kb/query/ \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -d '{"search": "select_related"}'
+```
+
+```json
+{
+  "search": "select_related",
+  "count": 3,
+  "results": [
+    {
+      "id": 1,
+      "question": "What is select_related in Django ORM?",
+      "answer": "select_related performs a SQL JOIN and fetches ...",
+      "category": "database"
+    }
+  ]
+}
+```
+
+Key behaviours:
+
+- **JWT by default**: `REST_FRAMEWORK` in `settings.py` globally requires
+  `JWTAuthentication` + `IsAuthenticated`. Register/Login override this with
+  `authentication_classes = []` and `permission_classes = []`.
+- **API keys are generated by a signal**, not by the view: a `post_save`
+  signal on `User` creates the `Company` profile with
+  `secrets.token_urlsafe(32)` (wired in `ApiConfig.ready()`).
+- **Query logging is atomic**: the search and the `QueryLog` insert run inside
+  one `transaction.atomic()` block; zero-result queries are still logged
+  (usage-based billing counts queries made, not answers found).
+- **Admin gate**: `api/permissions.py` defines `IsAdminUser`, which checks
+  `request.user.company.role == Company.Role.ADMIN`. Clients get 403.
+
+## Postman Collection
+
+Import `TeamBoard.postman_collection.json` into Postman and run the requests
+**in order (01-11)**:
+
+1. Register - Success (201)
+2. Register - Duplicate Username (400)
+3. Register - Missing Fields (400)
+4. Login - Success (200)
+5. Login - Invalid Credentials (401)
+6. KB Query - No Token (401)
+7. KB Query - With Token, Results Found (200)
+8. KB Query - No Matching Results (200, count 0)
+9. KB Query - Blank Search (400)
+10. Usage Summary - Client Token (403)
+11. Usage Summary - Admin Token (200)
+
+Request 04 saves the client JWT into the `client_token` collection variable;
+request 11 fetches the admin JWT automatically in its pre-request script.
+All requests include assertions, so use **Runner** to see every scenario pass.
+
+> Before re-running the full collection, reset the database so scenario 01
+> (register `acmecorp`) succeeds again:
+>
+> ```bash
+> python manage.py flush --no-input && python manage.py seed_kb
+> ```
+
+## Re-running from Scratch
+
+```bash
+rm db.sqlite3                       # or: docker compose down -v (Postgres)
+python manage.py migrate
+python manage.py seed_kb
+python manage.py runserver
+```
